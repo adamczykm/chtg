@@ -34,7 +34,7 @@ type Algorithm = Graf -> ColoredGraf
 
 -- | Largest First
 lfOrder :: Order
-lfOrder g = reverse . sortBy (compare `on` deg g) $ nodes g
+lfOrder g = reverse . sortBy (compare `on` deg g) . reverse $ nodes g
 
 -- | Smallest Last
 slOrder :: Order
@@ -43,7 +43,12 @@ slOrder g' = reverse $ map snd $ slWorker [] g'
         slWorker xs g | g == empty = xs
         slWorker xs g              = slWorker ((deg g sm, sm):xs)
                                               (delNode sm g)
-          where sm = minimumBy (compare `on` (deg g)) (nodes g)
+          where sm      = minimumBy cmp (nodes g)
+                cmp x y = let s = (compare `on` deg g) x y
+                          in case s of
+                              EQ -> (compareLowerIsGreater `on` id) x y
+                              _  -> s
+                              
 
 -- | DSatur
 dsOrder :: Order
@@ -60,17 +65,17 @@ dsOrder g = if ns' == []
           where updateDs xs nds = foldr (IM.update (Just . succ)) nds xs
                 viewMaxValue im | im == IM.empty = Nothing
                 viewMaxValue im                  = Just (fst m, rest)
-                  where m    = maximumBy (compare `on` snd) $ IM.toList im
-                        rest = IM.delete (fst m) im
+                  where m       = maximumBy cmp $ IM.toList im
+                        rest    = IM.delete (fst m) im
+                        cmp x y = let s = (compare `on` snd) x y
+                                  in case s of
+                                   EQ -> (compareLowerIsGreater `on` fst) x y
+                                   _  -> s
 
         ns' = lfOrder g
         initialSatur = IM.fromList $ zip ns' (1 : repeat 0)
 
 -- =================== Algorym kolorowania
-
-
-updateMany :: (a->a) ->  IM.IntMap a -> [IM.Key] -> IM.IntMap a
-updateMany f  = foldr (IM.update (Just . f)) 
 
 -- | Funkcja dla danej kolejnosci wybierania wierzcholkow z grafu
 --   zwraca poprawnie (zgodnie z warunkami zadania) pokolorwany graf
@@ -191,6 +196,12 @@ fromInt _ = True
 graphSize :: Graf -> Int
 graphSize = length . nodes
 
+compareLowerIsGreater :: Ord a => a -> a -> Ordering
+compareLowerIsGreater x y = rev $ compare x y
+  where rev EQ = EQ
+        rev GT = LT
+        rev LT = GT
+
 dbg :: Show a => String -> a -> a
 dbg s a = T.traceStack (s ++ ": " ++ (show a) ++ "\n") a
 
@@ -293,13 +304,13 @@ main :: IO ()
 main = do
   g  <- getArgs   >>= readFromMatrixFile . (!! 0)
 
-  putStrLn "== Largest First =="
+  putStrLn $ "== Largest First: " ++ (show $ lfOrder g)
   putStrLn $ printAnswer $ colorGraphWithOrder lfOrder g
 
-  putStrLn "== Smallest Last =="
+  putStrLn $ "== Smallest Last: " ++ (show $ slOrder g)
   putStrLn $ printAnswer $ colorGraphWithOrder slOrder g
 
-  putStrLn "== DSatur        =="
+  putStrLn $ "== DSatur: " ++ (show $ dsOrder g)
   putStrLn $ printAnswer $ colorGraphWithOrder dsOrder g
 
   return ()
