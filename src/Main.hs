@@ -38,7 +38,7 @@ lfOrder g = reverse . sortBy (compare `on` deg g) . reverse $ nodes g
 
 -- | Smallest Last
 slOrder :: Order
-slOrder g' = reverse $ map snd $ slWorker [] g'
+slOrder g' = reverse $ snd <$> slWorker [] g'
   where slWorker :: [(Int, Node)] -> Graf -> [(Int, Node)]
         slWorker xs g | g == empty = xs
         slWorker xs g              = slWorker ((deg g sm, sm):xs)
@@ -116,32 +116,34 @@ colorGraphWithOrder order g = go (order g) empty
             Nothing -> let (scn, mcn) =
                             partition ((==Just 1) .
                                        (flip IM.lookup) colorsCount .
-                                       color cg)
-                                      neighs
+                                       col) $
+                                      neighs n
                       in not (startsPath scn) && not (inPath mcn)
 
           where -- | czy stanie się początkiem scieżki o dl. 3
                 startsPath scn = some $ do
                   n1 <- scn
-                  n2 <- safeNeighbors cg n1
-                  guard (n2 /= n && color cg n2 == c)
-                  n3 <- safeNeighbors cg n2
-                  guard (n3 /= n1 && color cg n3 == color cg n1)
+                  n2 <- neighs n1
+                  guard (n2 /= n && col n2 == c)
+                  n3 <- neighs n2
+                  guard (n3 /= n1 && col n3 == col n1)
 
                 -- | Czy bedzie czescią scieżki o dl. 3?
                 inPath mcn = some $  do
                   n1 <- mcn
-                  n2 <- safeNeighbors cg n1
-                  guard (n2 /= n && color cg n2 == c)
+                  n2 <- neighs n1
+                  guard (n2 /= n && col n2 == c)
 
-                -- | Sasiedzi wierzchołka n, w pokolorowanej czesci grafu.
-                neighs = filter (\x -> x `gelem` cg) (safeNeighbors g n)
+                -- | Sasiedzi wierzchołka w pokolorowanej czesci grafu.
+                neighs n' | n' == n  = filter (\x -> x `gelem` cg) (safeNeighbors g n)
+                neighs n'            = safeNeighbors cg n'
 
                 -- | Pomocniczy slownik ilosci kolorów
-                colorsCount = foldr inc IM.empty (map (color cg) neighs)
+                colorsCount = foldr inc IM.empty (col <$> neighs n)
                   where inc c' ccs = case IM.lookup c' ccs of
                                      Nothing -> IM.insert c' (1 :: Integer) ccs
                                      Just i  -> IM.insert c' (i + 1)        ccs
+                col = color cg
 
 printAnswer :: ColoredGraf -> String
 printAnswer cg = "Ilość kolorów: " ++ show (maximum $ toList (colors cg))
@@ -163,7 +165,7 @@ color g n = case lab g n of
 -- | Zwraca wszystkie kolory w grafie
 colors :: ColoredGraf -> S.Set Color
 colors cg | cg == empty = S.empty
-colors cg               = fromList $ map (color cg) (nodes cg)
+colors cg               = fromList $ color cg <$> nodes cg
 
 -- | Zwraca sasiadow wierzcholka w grafie
 safeNeighbors :: (Graph gr, Eq (gr a b)) => gr a b -> Node -> [Node]
@@ -210,16 +212,16 @@ dbg s a = T.traceStack (s ++ ": " ++ (show a) ++ "\n") a
 -- | Sprawdza czy graf g posiada sciezke o dlugosci n.
 hasPathWithLengthN :: Int -> Graf -> Bool
 hasPathWithLengthN n g = any (== n) pathLengths
-  where pathLengths = concat $ (map . map) snd dists
-        dists       = map (\x -> level x (undir g)) $
-                          map head (components g)
+  where pathLengths = concat $ (fmap . fmap) snd dists
+        dists       = (\x -> level x (undir g)) <$>
+                      head                      <$>
+                      components g
 
 checkColoring :: ColoredGraf -> Bool
 checkColoring cg = (not $ any hasSameColoredNeighbour (nodes cg))
                    &&
                    (not $ any colorsInducePath everyPairOfColors)
-  where hasSameColoredNeighbour n = col n `elem` map col
-                                                     (neighbors cg n)
+  where hasSameColoredNeighbour n = col n `elem` (col <$> neighbors cg n)
 
         colorsInducePath = undefined
 
@@ -249,9 +251,9 @@ fromNeighbourhoodList :: [[Node]] -> Graf
 fromNeighbourhoodList nss = fixGraph $ mkGraph (zip names (repeat Nothing)) ledges
   where names = [1..(length nss)]
         
-        ledges = concat $ map (uncurry edgesFromNs) (zip names nss)
+        ledges = concat $ uncurry edgesFromNs <$> zip names nss
         
-        edgesFromNs n = map (\x -> (n, x, ()))
+        edgesFromNs n = fmap (\x -> (n, x, ()))
         
         fixGraph g' = undirG $ clearSelfEdges $ addMissingNodes g' (nodesFromEdges g')
         
@@ -275,11 +277,11 @@ fromNeighbourhoodList nss = fixGraph $ mkGraph (zip names (repeat Nothing)) ledg
 parseFromNeighbourMatrix :: String -> Graf
 parseFromNeighbourMatrix = fromMatrix . readMatrix
   where readMatrix :: String -> [[Bool]]
-        readMatrix = (map . map) (fromInt . read) . map words . lines
+        readMatrix = (fmap . fmap) (fromInt . read) . fmap words . lines
 
         fromMatrix :: [[Bool]] -> Graf
-        fromMatrix = fromNeighbourhoodList . map neighbours
-          where neighbours = (map fst) .
+        fromMatrix = fromNeighbourhoodList . fmap neighbours
+          where neighbours = (fmap fst) .
                              filter ((== True) . snd) .
                              zip [1..]
 
@@ -295,7 +297,7 @@ parseGraphFromFileWith parseFun fp = do
 graphFromNeighbourList :: String -> Graf
 graphFromNeighbourList = fromNeighbourhoodList . readNeighbourhoodList
          where readNeighbourhoodList :: String -> [[Node]]
-               readNeighbourhoodList = (map . map) read  . map words . lines 
+               readNeighbourhoodList = (fmap . fmap) read  . fmap words . lines 
 
 
 -- ======================== Main
@@ -303,6 +305,7 @@ graphFromNeighbourList = fromNeighbourhoodList . readNeighbourhoodList
 main :: IO ()
 main = do
   g  <- getArgs   >>= readFromMatrixFile . (!! 0)
+  putStrLn $ "Degs: " ++ (show $ deg g <$> nodes g)
 
   putStrLn $ "== Largest First: " ++ (show $ lfOrder g)
   putStrLn $ printAnswer $ colorGraphWithOrder lfOrder g
