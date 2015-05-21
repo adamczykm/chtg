@@ -11,7 +11,7 @@ import Data.Graph.Inductive.Dot
 import qualified Data.Set as S
 import Data.Set (fromList, toList)
 import qualified Data.IntMap as IM
-import Data.List (partition,sortBy,minimumBy, maximumBy, nub)
+import Data.List (partition,sortBy,minimumBy, maximumBy)
 import Data.Function (on)
 import System.Random
 
@@ -259,24 +259,24 @@ fromNeighbourhoodList nss = fixGraph $ mkGraph (zip names (repeat Nothing)) ledg
         ledges = concat $ uncurry edgesFromNs <$> zip names nss
         
         edgesFromNs n = fmap (\x -> (n, x, ()))
-        
-        fixGraph g' = undirG $ clearSelfEdges $ addMissingNodes g' (nodesFromEdges g')
-        
-          where nodesFromEdges = unique .
-                                 foldl (\xs (v1,v2) -> v1 : v2 : xs) [] .
-                                 edges
 
-                clearSelfEdges g = efilter (\(v1,v2, _) -> v1 /= v2) g
+fixGraph :: Graf -> Graf
+fixGraph g' = undirG $ clearSelfEdges $ addMissingNodes g' (nodesFromEdges g')
+  where nodesFromEdges = unique .
+                         foldl (\xs (v1,v2) -> v1 : v2 : xs) [] .
+                         edges
 
-                undirG g = foldr delEdge (undir g)
+        clearSelfEdges g = efilter (\(v1,v2, _) -> v1 /= v2) g
+
+        undirG g = foldr delEdge (undir g)
                                  [(v1,v2) |
                                   v1 <- [1..(graphSize g)],
                                   v2 <- [(v1+1)..(graphSize g)]]
 
-                addMissingNodes g []     = g
-                addMissingNodes g (n:ns) | notElem n (nodes g)
-                                         = addMissingNodes (insNode (n,Nothing) g) ns
-                addMissingNodes g (_:ns) = addMissingNodes g ns
+        addMissingNodes g []     = g
+        addMissingNodes g (n:ns) | notElem n (nodes g)
+                                 = addMissingNodes (insNode (n,Nothing) g) ns
+        addMissingNodes g (_:ns) = addMissingNodes g ns
 
 
 parseFromNeighbourMatrix :: String -> Graf
@@ -335,7 +335,20 @@ generateRandomGraph n e = do
   let lnodes =  zip [1..n] (repeat Nothing)
   ledges     <- rnd_select [(x,y,())| x <- [1..n], y <- [x..n]]
                            e
-  return $ mkGraph lnodes ledges
+  return $ fixGraph $ mkGraph lnodes ledges
+
+
+testAlgorithmWithOrder :: Order -> Int -> Int -> IO Double
+
+testAlgorithmWithOrder o n e = fromInt $ foldl1 (+) $ take n (repeat getColorCount)
+
+  where getColorCount = do
+          g <- generateRandomGraph n e
+          let cg = colorGraphWithOrder o g
+          return $ (maximum . toList . colors) cg
+    
+
+
 
 -- ======================== Main
 
