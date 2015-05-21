@@ -1,14 +1,19 @@
 module Main where
 
 import System.Environment
+import System.Process (system)
+import GHC.IO.Exception
 import Control.Monad (guard)
 
+import Data.Functor ((<$>))
 import Data.Graph.Inductive
+import Data.Graph.Inductive.Dot
 import qualified Data.Set as S
 import Data.Set (fromList, toList)
 import qualified Data.IntMap as IM
-import Data.List (partition,sortBy,minimumBy, maximumBy)
+import Data.List (partition,sortBy,minimumBy, maximumBy, nub)
 import Data.Function (on)
+import System.Random
 
 import qualified Debug.Trace as T
 
@@ -297,14 +302,51 @@ parseGraphFromFileWith parseFun fp = do
 graphFromNeighbourList :: String -> Graf
 graphFromNeighbourList = fromNeighbourhoodList . readNeighbourhoodList
          where readNeighbourhoodList :: String -> [[Node]]
-               readNeighbourhoodList = (fmap . fmap) read  . fmap words . lines 
+               readNeighbourhoodList = (fmap . fmap) read  . fmap words . lines
 
+-- ======================== Wizualizacja
+
+visualiseGraph :: (Graph gr, Show b, Show a) =>
+                  gr a b -> IO GHC.IO.Exception.ExitCode
+visualiseGraph g = do
+  let dot = showDot (fglToDot g)
+  writeFile "file.dot" dot
+  system("dot -Tpng -ofile.png file.dot")
+
+-- ======================== Generowanie losowych grafow
+
+-- rnd_select :: Int -> [a] -> [a]
+-- rnd_select n x = map (x!!) is
+--  where is = take n . nub $ randomRs (0, length x - 1) (mkStdGen 100)
+
+rnd_select :: [a] -> Int -> IO [a]
+rnd_select _ 0 = return []
+rnd_select (x:xs) n =
+    do r <- randomRIO (0, (length xs))
+       if r < n
+           then do
+               rest <- rnd_select xs (n-1)
+               return (x : rest)
+           else rnd_select xs n
+
+-- | Generates graph with n nodes and e edges.
+generateRandomGraph :: Int -> Int -> IO Graf
+generateRandomGraph n e = do
+  let lnodes =  zip [1..n] (repeat Nothing)
+  ledges     <- rnd_select [(x,y,())| x <- [1..n], y <- [x..n]]
+                           e
+  return $ mkGraph lnodes ledges
 
 -- ======================== Main
 
 main :: IO ()
 main = do
-  g  <- getArgs   >>= readFromMatrixFile . (!! 0)
+  g <- readFromMatrixFile "graphs/LF3_SL5_DS5.graph"
+  -- g  <- getArgs   >>= readFromMatrixFile . (!! 0)
+
+  --g <- generateRandomGraph 20 50
+  visualiseGraph g
+
   putStrLn $ "Degs: " ++ (show $ deg g <$> nodes g)
 
   putStrLn $ "== Largest First: " ++ (show $ lfOrder g)
