@@ -1,9 +1,12 @@
 module Main where
 
-import System.Environment
+--testy
+import Criterion.Main
+
+--import System.Environment
 import System.Process (system)
 import GHC.IO.Exception
-import Control.Monad (guard)
+import Control.Monad
 
 import Data.Functor ((<$>))
 import Data.Graph.Inductive
@@ -339,25 +342,50 @@ generateRandomGraph n e = do
 
 
 testAlgorithmWithOrder :: Order -> Int -> Int -> IO Double
+testAlgorithmWithOrder o n e = do
+  g <- generateRandomGraph n e
+  let cg = colorGraphWithOrder o g
+  return $ fromIntegral $ (maximum . toList . colors) cg
 
-testAlgorithmWithOrder o n e = fromInt $ foldl1 (+) $ take n (repeat getColorCount)
 
-  where getColorCount = do
-          g <- generateRandomGraph n e
-          let cg = colorGraphWithOrder o g
-          return $ (maximum . toList . colors) cg
+testAlgorithmWithOrderNTimes :: Order -> Int -> Int -> Int -> IO Double
+testAlgorithmWithOrderNTimes o n e t = do
+  s <- strictSum <$> (replicateM t $ testAlgorithmWithOrder o n e)
+  return $ s / fromIntegral t
+
     
-
-
-
 -- ======================== Main
+orders :: [(String, Order)]
+orders = [("LF",lfOrder), ("SL",slOrder), ("DS",dsOrder)]
 
-main :: IO ()
-main = do
+strictSum :: Num a => [a] -> a
+strictSum     [] = 0
+strictSum (x:xs) = seq x (x + strictSum xs)
+
+
+meanValueTestMain :: IO ()
+meanValueTestMain = mapM_ test orders
+  where test (n, o) = do        
+          putStr $ n ++ ": "
+          ans <- liftM show $ mapM (\x -> testAlgorithmWithOrderNTimes o x
+                                          (floor ((fromIntegral x) * (fromIntegral x)
+                                                  / (3.0 :: Double)))
+                                          100)
+                                   [10,15..50]
+          putStrLn ans
+          return ()
+
+criterionMain :: IO ()
+criterionMain = defaultMain $ (\(name,order) -> bgroup (name ++ " rzadki") $
+                              (\x -> bench (show x) $
+                                     nfIO (testAlgorithmWithOrder order x x))
+                              <$> [10,20..100])
+                      <$> [("LF",lfOrder), ("SL",slOrder), ("DS", dsOrder)]
+
+
+loadGraphFromFileMain :: IO ()
+loadGraphFromFileMain = do
   g <- readFromMatrixFile "graphs/LF3_SL5_DS5.graph"
-  -- g  <- getArgs   >>= readFromMatrixFile . (!! 0)
-
-  --g <- generateRandomGraph 20 50
   visualiseGraph g
 
   putStrLn $ "Degs: " ++ (show $ deg g <$> nodes g)
@@ -373,4 +401,6 @@ main = do
 
   return ()
 
-  
+
+main :: IO ()
+main = meanValueTestMain

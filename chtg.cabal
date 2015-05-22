@@ -20,6 +20,7 @@ executable chtg
   -- other-modules:
   -- other-extensions:
   build-depends:       PSQueue
+                     , criterion
                      , array >= 0.5.0.0
                      , base
                      , containers >= 0.5.5.1
