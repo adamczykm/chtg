@@ -362,24 +362,33 @@ strictSum :: Num a => [a] -> a
 strictSum     [] = 0
 strictSum (x:xs) = seq x (x + strictSum xs)
 
+denseEdges :: (Integral a, Integral b) => a -> b
+denseEdges x = (floor ((fromIntegral x) * (fromIntegral x) / (3.0 :: Double)))
 
 meanValueTestMain :: IO ()
 meanValueTestMain = mapM_ test orders
   where test (n, o) = do        
           putStr $ n ++ ": "
           ans <- liftM show $ mapM (\x -> testAlgorithmWithOrderNTimes o x
-                                          (floor ((fromIntegral x) * (fromIntegral x)
-                                                  / (3.0 :: Double)))
+                                          (denseEdges x)
                                           100)
                                    [10,15..50]
           putStrLn ans
           return ()
 
-criterionMain :: IO ()
-criterionMain = defaultMain $ (\(name,order) -> bgroup (name ++ " rzadki") $
+criterionMainRzadki :: IO ()
+criterionMainRzadki = defaultMain $ (\(name,order) -> bgroup (name ++ " rzadki") $
                               (\x -> bench (show x) $
                                      nfIO (testAlgorithmWithOrder order x x))
                               <$> [10,20..100])
+                      <$> [("LF",lfOrder), ("SL",slOrder), ("DS", dsOrder)]
+
+criterionMainGesty :: IO ()
+criterionMainGesty = defaultMain $ (\(name,order) -> bgroup (name ++ " gesty") $
+                              (\x -> let e = denseEdges x in
+                                      bench (show e) $
+                                      nfIO (testAlgorithmWithOrder order x e))
+                              <$> [10,15..50])
                       <$> [("LF",lfOrder), ("SL",slOrder), ("DS", dsOrder)]
 
 
